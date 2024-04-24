@@ -64,7 +64,7 @@ def load_final_dataset(destination_dir, n_rows):
     columns_to_split = ['gastro_categories', 'user_elite']
     for column in columns_to_split:
         exploded = df[column].str.split(',').explode()
-        dummies = pd.get_dummies(exploded, prefix=column)
+        dummies = pd.get_dummies(exploded, prefix=column).astype('float32')
         dummies = dummies.groupby(dummies.index).sum()
         df = df.join(dummies) 
 
@@ -78,13 +78,13 @@ def load_final_dataset(destination_dir, n_rows):
         df[column] = df[column].fillna(0)
 
     categorical_cols = df.select_dtypes(include=['object']).columns
-    df = pd.get_dummies(df, columns=categorical_cols)
+    df = pd.get_dummies(df, columns=categorical_cols).astype('float32')
 
     # Print the number of missing values in each column
     print(f"\nNumber of missing values: {df.isnull().sum().sum()}")
     print(f"\nThese are the first 5 rows of the dataset after cleaning:\n{df.head()}")
 
-    non_numeric_columns = df.select_dtypes(exclude=['int', 'float', 'bool']).shape[1]
+    non_numeric_columns = df.select_dtypes(exclude=['int', 'float']).shape[1]
     print(f"The number of columns that are not of type numeric or float is: {non_numeric_columns}")
 
     # Save the DataFrame as a parquet file

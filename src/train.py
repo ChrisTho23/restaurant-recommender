@@ -8,6 +8,19 @@ import pandas as pd
 from config import DATA, MODEL, TRAIN, USER_COLS, ITEM_COLS, LABEL_COLS, MODEL_DIR
 from model import NCF
 
+def filter_frame(df: pd.DataFrame, col_prefixes: list) -> pd.DataFrame:
+    """Filter DataFrame columns based on a list of prefixes, capturing any one-hot encoded extensions.
+
+    Args:
+        df (pd.DataFrame): The DataFrame from which to filter columns.
+        col_prefixes (list): A list of column name prefixes to include in the filter.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing only the columns that match the prefixes.
+    """
+    filtered_cols = [col for col in df.columns if any(col.startswith(prefix) for prefix in col_prefixes)]
+    return df[filtered_cols]
+
 class YelpDataset(Dataset):
     def __init__(self, item_data, user_data, label):
         self.user_data = user_data
@@ -72,9 +85,9 @@ if __name__ == '__main__':
     train_df, val_df = train_test_split(df, test_size=0.2, random_state=42)
 
     # Split into user and item data
-    user_train_data, user_val_data = train_df[USER_COLS], val_df[USER_COLS]
-    item_train_data, item_val_data = train_df[ITEM_COLS], val_df[ITEM_COLS]
-    train_label, val_label = train_df[LABEL_COLS], val_df[LABEL_COLS]
+    user_train_data, user_val_data = filter_frame(train_df, USER_COLS), filter_frame(val_df, USER_COLS)
+    item_train_data, item_val_data = filter_frame(train_df, ITEM_COLS), filter_frame(val_df, ITEM_COLS)
+    train_label, val_label = filter_frame(train_df, LABEL_COLS), filter_frame(val_df, LABEL_COLS)
     print(
         f"The user data encompasses {user_train_data.shape[1]} features (encdoed).",
         f"\nThe item data encompasses {item_train_data.shape[1]} features (encdoed).",

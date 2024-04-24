@@ -19,7 +19,7 @@ GOOGLE_CLOUD_CREDENTIALS = "/Users/Christophe/.config/gcloud/application_default
 
 # Columns containing user data
 USER_COLS = [
-    'review_useful', 'review_funny', 'review_cool', 'review_user_id' 'user_review_count', 'user_useful', 
+    'review_useful', 'review_funny', 'review_cool', 'review_user_id', 'user_review_count', 'user_useful', 
     'user_funny', 'user_cool', 'user_elite', 'user_fans', 'user_average_stars'
 ]
 
