@@ -13,6 +13,7 @@ pandas = "^2.2.1"
 google-cloud-storage = "^2.16.0"
 torch = "^2.2.2"
 pyarrow = "^16.0.0"
+scikit-learn = "^1.4.2"
 
 
 [build-system]
