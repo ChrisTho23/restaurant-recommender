@@ -23,7 +23,7 @@ def load_final_dataset(destination_dir, n_rows):
     print("Downloading data from the bucket...")
 
     # Download the file from the bucket
-    storage_client = storage.Client()
+    storage_client = storage.Client(project='e-charger-418218')
     bucket = storage_client.bucket("restaurant-recommender-dataset")
     blob = bucket.blob("out-s0.csv.gz")
     blob.download_to_filename(DATA_DIR / "data.csv.gz")
