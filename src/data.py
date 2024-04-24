@@ -51,8 +51,8 @@ def load_final_dataset(destination_dir, n_rows):
 
     # Drop not needed columns
     df = df.drop(columns=[
-        'gastro_business_id', 'gastro_address', 'gastro_latitude', 'gastro_latitude', 'gastro_longitude', 'review_id', 
-        'review_user_id', 'user_name', 'review_text', 'review_date', 'user_yelping_since', 'user_friends'
+        'gastro_name', 'gastro_address', 'gastro_latitude', 'gastro_longitude', 'review_id', 
+        'user_name', 'review_text', 'review_date', 'user_yelping_since', 'user_friends'
     ])
 
     if 'gastro_postal_code' in df.columns:
@@ -77,7 +77,7 @@ def load_final_dataset(destination_dir, n_rows):
     for column in df.select_dtypes(include=['int', 'float']).columns:
         df[column] = df[column].fillna(0)
 
-    categorical_cols = df.select_dtypes(include=['object']).columns.difference(['gastro_name'])
+    categorical_cols = df.select_dtypes(include=['object']).columns
     df = pd.get_dummies(df, columns=categorical_cols)
 
     # Print the number of missing values in each column
