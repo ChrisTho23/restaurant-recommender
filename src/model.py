@@ -6,7 +6,7 @@ from typing import Optional
 from model_components import MLP
 
 class NCF(nn.Module):
-    def __init__(self, user_dim, item_dim, embedding_dim, num_layers, dropout, num_businesses):
+    def __init__(self, user_dim, item_dim, embedding_dim, dropout):
         super(NCF, self).__init__()
         self.user_embedding = nn.Embedding(user_dim, embedding_dim)
         self.item_embedding = nn.Embedding(item_dim, embedding_dim)
