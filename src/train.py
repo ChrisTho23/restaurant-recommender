@@ -77,8 +77,6 @@ if __name__ == '__main__':
         "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
     )
     print(f"Using device: {device}")
-    torch.cuda.empty_cache()
-    torch.cuda.reset_peak_memory_stats()
 
     # Load data
     df = pd.read_parquet(DATA["data"], engine='pyarrow')
