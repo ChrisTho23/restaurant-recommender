@@ -1,4 +1,4 @@
-#import kaggle
+import kaggle
 import argparse
 import os
 import pandas as pd
@@ -43,7 +43,7 @@ def load_final_dataset(destination_dir, n_rows):
     )
     print(
         f"These are the first 5 rows of the dataset:\n{df.head()}"
-        f"\n\nThe dataset has {df.shape[0]} rows and {df.shape[1]} columns."
+        f"The dataset has {df.shape[0]} rows and {df.shape[1]} columns."
     )
 
     # Drop samples in which review_stars is NaN
@@ -81,8 +81,8 @@ def load_final_dataset(destination_dir, n_rows):
     df = pd.get_dummies(df, columns=categorical_cols).astype('float32')
 
     # Print the number of missing values in each column
-    print(f"\nNumber of missing values: {df.isnull().sum().sum()}")
-    print(f"\nThese are the first 5 rows of the dataset after cleaning:\n{df.head()}")
+    print(f"Number of missing values: {df.isnull().sum().sum()}")
+    print(f"These are the first 5 rows of the dataset after cleaning:\n{df.head()}")
 
     non_numeric_columns = df.select_dtypes(exclude=['int', 'float']).shape[1]
     print(f"The number of columns that are not of type numeric or float is: {non_numeric_columns}")
