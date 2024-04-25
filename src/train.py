@@ -4,6 +4,7 @@ from torch.optim import Adam
 from torch import nn
 from sklearn.model_selection import train_test_split
 import pandas as pd
+import time
  
 from config import DATA, MODEL, TRAIN, USER_COLS, ITEM_COLS, LABEL_COLS, MODEL_DIR
 from model import NCF
@@ -22,7 +23,7 @@ def filter_frame(df: pd.DataFrame, col_prefixes: list) -> pd.DataFrame:
     return df[filtered_cols]
 
 class YelpDataset(Dataset):
-    def __init__(self, item_data, user_data, label):
+    def __init__(self, user_data, item_data, label):
         self.user_data = user_data
         self.item_data = item_data
         self.label = label
@@ -49,7 +50,7 @@ def train(model, train_loader, optimizer, epoch):
             print(f"Epoch: {epoch}, Batch: {batch}, Avg. loss across lass 1000 batches: {batch_loss[-1]}")
             running_loss = 0.
         
-    return sum(batch_loss) / len(batch_loss)
+    return sum(batch_loss) / len(batch_loss) if batch_loss else (running_loss / (batch + 1))
 
 @torch.no_grad()
 def evaluate(model, val_loader, epoch):
@@ -79,7 +80,7 @@ if __name__ == '__main__':
 
     # Load data
     df = pd.read_parquet(DATA["data"], engine='pyarrow')
-    print(f"\n\nThe dataset encompasses {df.shape[0]} samples.")
+    print(f"The dataset encompasses {df.shape[0]} samples.")
 
     # Split into train and validation data
     train_df, val_df = train_test_split(df, test_size=0.2, random_state=42)
@@ -141,13 +142,13 @@ if __name__ == '__main__':
         epoch_loss["val"].append(val_loss)
 
         print(
-            f"Training loss epoch {epoch}: {epoch_loss['train']}"
-            f"\nValidation loss epoch {epoch}: {epoch_loss['val']}"
+            f"Training loss epoch {epoch}: {epoch_loss['train'][-1]}"
+            f"\nValidation loss epoch {epoch}: {epoch_loss['val'][-1]}"
         )  
 
         # Save the best model
         if epoch_loss["val"][-1] == min(epoch_loss["val"]):
-            torch.save(model.state_dict(), MODEL_DIR / f"ncf_model_{epoch}.pth")
+            torch.save(model.state_dict(), MODEL_DIR / f"ncf_model_{time.strftime('%m_%d')}.pth")
 
 
 

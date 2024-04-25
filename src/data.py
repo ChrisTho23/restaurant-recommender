@@ -23,7 +23,7 @@ def load_final_dataset(destination_dir, n_rows):
     print("Downloading data from the bucket...")
 
     # Download the file from the bucket
-    storage_client = storage.Client()
+    storage_client = storage.Client(project='e-charger-418218')
     bucket = storage_client.bucket("restaurant-recommender-dataset")
     blob = bucket.blob("out-s0.csv.gz")
     blob.download_to_filename(DATA_DIR / "data.csv.gz")
@@ -43,7 +43,7 @@ def load_final_dataset(destination_dir, n_rows):
     )
     print(
         f"These are the first 5 rows of the dataset:\n{df.head()}"
-        f"\n\nThe dataset has {df.shape[0]} rows and {df.shape[1]} columns."
+        f"The dataset has {df.shape[0]} rows and {df.shape[1]} columns."
     )
 
     # Drop samples in which review_stars is NaN
@@ -81,8 +81,8 @@ def load_final_dataset(destination_dir, n_rows):
     df = pd.get_dummies(df, columns=categorical_cols).astype('float32')
 
     # Print the number of missing values in each column
-    print(f"\nNumber of missing values: {df.isnull().sum().sum()}")
-    print(f"\nThese are the first 5 rows of the dataset after cleaning:\n{df.head()}")
+    print(f"Number of missing values: {df.isnull().sum().sum()}")
+    print(f"These are the first 5 rows of the dataset after cleaning:\n{df.head()}")
 
     non_numeric_columns = df.select_dtypes(exclude=['int', 'float']).shape[1]
     print(f"The number of columns that are not of type numeric or float is: {non_numeric_columns}")
