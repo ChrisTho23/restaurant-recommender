@@ -1,10 +1,10 @@
 import torch
 from torch.utils.data import DataLoader, Dataset
 from torch.optim import Adam
-from torch import nn
 from sklearn.model_selection import train_test_split
 import pandas as pd
 import time
+import wandb
  
 from config import DATA, MODEL, TRAIN, USER_COLS, ITEM_COLS, LABEL_COLS, MODEL_DIR
 from model import NCF
@@ -72,6 +72,9 @@ if __name__ == '__main__':
     # Set seed
     torch.manual_seed(42)
 
+    # Initialize wandb
+    wandb.init(project="restuarant-recommender")
+
     # Set device
     device = torch.device(
         "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
@@ -80,7 +83,8 @@ if __name__ == '__main__':
 
     # Load data
     df = pd.read_parquet(DATA["data"], engine='pyarrow')
-    print(f"The dataset encompasses {df.shape[0]} samples.")
+    n_samples = df.shape[0]
+    print(f"The dataset encompasses {n_samples} samples.")
 
     # Split into train and validation data
     train_df, val_df = train_test_split(df, test_size=0.2, random_state=42)
@@ -122,6 +126,15 @@ if __name__ == '__main__':
     # Define optimizer
     optimizer = Adam(model.parameters(), lr=TRAIN["lr"])
 
+    wandb.config.update({
+        "n_samples": n_samples,
+        "batch_size": TRAIN["batch_size"],
+        "learning_rate": TRAIN["lr"],
+        "embedding_dim": MODEL["embedding_dim"],
+        "dropout": MODEL["dropout"],
+        "epochs": TRAIN["epochs"]
+    })
+
     # Model training
     epoch_loss = {
         "train": [],
@@ -141,6 +154,8 @@ if __name__ == '__main__':
         val_loss = evaluate(model, val_loader, epoch)
         epoch_loss["val"].append(val_loss)
 
+        wandb.log({"epoch_train_loss": train_loss, "epoch_val_loss": val_loss, "epoch": epoch})
+
         print(
             f"Training loss epoch {epoch}: {epoch_loss['train'][-1]}"
             f"\nValidation loss epoch {epoch}: {epoch_loss['val'][-1]}"
@@ -149,6 +164,8 @@ if __name__ == '__main__':
         # Save the best model
         if epoch_loss["val"][-1] == min(epoch_loss["val"]):
             torch.save(model.state_dict(), MODEL_DIR / f"ncf_model_{time.strftime('%m_%d')}.pth")
+
+    wandb.finish()
 
 
 
