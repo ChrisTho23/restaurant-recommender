@@ -11,7 +11,9 @@ DATA = {
     'agreement': DATA_DIR / 'Dataset_User_Agreement.pdf',
     'checkin': DATA_DIR / 'yelp_academic_dataset_checkin.json',
     'tip': DATA_DIR / 'yelp_academic_dataset_tip.json',
-    'data': DATA_DIR / 'data.parquet',
+    'train': DATA_DIR / 'data.parquet',
+    'inference': DATA_DIR / 'inference.parquet',
+    'predictions': DATA_DIR / 'predictions.parquet',
 }
 
 # Path to the Google Cloud credentials
@@ -32,6 +34,7 @@ ITEM_COLS = [
 LABEL_COLS = ['review_stars']
 
 MODEL = {
+    'NCF': MODEL_DIR / 'ncf.pth',
     'embedding_dim': 128,
     'dropout': 0.2,
 }

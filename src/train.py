@@ -5,6 +5,7 @@ from sklearn.model_selection import train_test_split
 import pandas as pd
 import time
 import wandb
+import argparse
  
 from config import DATA, MODEL, TRAIN, USER_COLS, ITEM_COLS, LABEL_COLS, MODEL_DIR
 from model import NCF
@@ -23,14 +24,17 @@ def filter_frame(df: pd.DataFrame, col_prefixes: list) -> pd.DataFrame:
     return df[filtered_cols]
 
 class YelpDataset(Dataset):
-    def __init__(self, user_data, item_data, label):
+    def __init__(self, user_data, item_data, label=None):
         self.user_data = user_data
         self.item_data = item_data
         self.label = label
     def __len__(self):
         return len(self.label)
     def __getitem__(self, idx):
-        return self.user_data[idx], self.item_data[idx], self.label[idx]
+        if self.label is not None:
+            return self.user_data[idx], self.item_data[idx], self.label[idx]
+        else:
+            return self.user_data[idx], self.item_data[idx]
 
 def train(model, train_loader, optimizer, epoch):
     running_loss = 0.
@@ -72,8 +76,15 @@ if __name__ == '__main__':
     # Set seed
     torch.manual_seed(42)
 
+    # Parse arguments
+    parser = argparse.ArgumentParser(
+        "--wandb_mode", help="Set the mode for wandb.", 
+        choices=["online", "offline", "disables"], default="disabled"
+    )
+    args = parser.parse_args()
+
     # Initialize wandb
-    wandb.init(project="restuarant-recommender")
+    wandb.init(project="restuarant-recommender", mode=args.wandb_mode)
 
     # Set device
     device = torch.device(
@@ -82,7 +93,7 @@ if __name__ == '__main__':
     print(f"Using device: {device}")
 
     # Load data
-    df = pd.read_parquet(DATA["data"], engine='pyarrow')
+    df = pd.read_parquet(DATA["train"], engine='pyarrow')
     n_samples = df.shape[0]
     print(f"The dataset encompasses {n_samples} samples.")
 
@@ -163,13 +174,7 @@ if __name__ == '__main__':
 
         # Save the best model
         if epoch_loss["val"][-1] == min(epoch_loss["val"]):
-            torch.save(model.state_dict(), MODEL_DIR / f"ncf_model_{time.strftime('%m_%d')}.pth")
+            torch.save(model.state_dict(), MODEL["NCF"])
+            wandb.run.summary["best_val_loss"] = val_loss
 
     wandb.finish()
-
-
-
-
-
-
-
