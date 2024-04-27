@@ -88,7 +88,7 @@ def load_final_dataset(destination_dir, n_rows):
     print(f"The number of columns that are not of type numeric or float is: {non_numeric_columns}")
 
     # Save the DataFrame as a parquet file
-    df.to_parquet(DATA["data"], index=False, engine="pyarrow")
+    df.to_parquet(DATA["train"], index=False, engine="pyarrow")
 
     (DATA_DIR / "data.csv.gz").unlink()
 

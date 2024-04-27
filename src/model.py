@@ -8,8 +8,8 @@ from model_components import MLP
 class NCF(nn.Module):
     def __init__(self, user_dim, item_dim, embedding_dim, dropout):
         super(NCF, self).__init__()
-        self.user_embedding = nn.Embedding(user_dim, embedding_dim)
-        self.item_embedding = nn.Embedding(item_dim, embedding_dim)
+        self.user_embedding = nn.Linear(user_dim, embedding_dim)
+        self.item_embedding = nn.Linear(item_dim, embedding_dim)
         self.dropout = nn.Dropout(dropout)
         self.batch_norm = nn.BatchNorm1d(2 * embedding_dim)
         self.mlp = nn.Sequential(
