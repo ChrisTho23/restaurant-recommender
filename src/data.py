@@ -1,110 +1,120 @@
-import kaggle
 import argparse
 import os
 import pandas as pd
+import logging
+from sklearn.preprocessing import LabelEncoder
 
-from config import DATA, DATA_DIR, GOOGLE_CLOUD_CREDENTIALS
+from config import DATA, DATA_DIR, COLS, DROP_COLS, GOOGLE_CLOUD_CREDENTIALS
 from google.cloud import storage
 
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = GOOGLE_CLOUD_CREDENTIALS
 
-def load_raw_datasets():
-    print("Downloading data from Kaggle...")
+def load_raw_datasets(data_dir):
+    """Download data from Kaggle."""
+    import kaggle
+    logging.info("Downloading data from Kaggle...")
     kaggle.api.authenticate()
     kaggle.api.dataset_download_files(
         dataset='yelp-dataset/yelp-dataset', 
-        path=DATA_DIR,
+        path=data_dir,
         unzip=True,
     )
-    print("Data downloaded successfully!")
+    logging.info("Data downloaded successfully!")
 
-def load_final_dataset(destination_dir, n_rows):
-    """Downloads a blob from the bucket."""
-    print("Downloading data from the bucket...")
+def preprocess_chunk(df, drop_cols):
+    """Preprocess a chunk of the dataframe."""
+    df = df.dropna(subset=["review_stars", "gastro_name"])
+    df['user_elite'] = df['user_elite'].fillna('Never')
+    df = df.drop(columns=drop_cols)
 
-    # Download the file from the bucket
-    storage_client = storage.Client(project='e-charger-418218')
+    # Label encoding review_user_id and gastro_business_id bc too many unique values
+    df['review_user_id'], _ = pd.factorize(df['review_user_id'])
+    df['gastro_business_id'], _ = pd.factorize(df['gastro_business_id'])
+
+    for column in ['gastro_categories', 'user_elite']:
+        dummies = df[column].str.get_dummies(sep=',').astype(int)
+        dummies.columns = [f"{column}_{cat}" for cat in dummies.columns]
+        df = pd.concat([df, dummies], axis=1)
+        df.drop(column, axis=1, inplace=True)
+
+    # Automatically identify and encode remaining categorical columns
+    cat_cols = df.select_dtypes(include=['object']).columns.tolist()
+    df = pd.get_dummies(df, columns=cat_cols).astype(int)
+    
+    return df
+
+def add_missing_categories(chunk, all_categories):
+    missing_categories = [cat for cat in all_categories if cat not in chunk.columns]
+    if missing_categories:
+        missing_df = pd.DataFrame(0, index=chunk.index, columns=missing_categories)
+        chunk = pd.concat([chunk, missing_df], axis=1)
+
+    return chunk
+
+def load_final_dataset(
+        data_dir, destination_file, col_names, drop_cols, chunk_size, num_chunks
+    ):
+    """Downloads a blob from the bucket and processes data."""
+    logging.info("Downloading data from the bucket...")
+    storage_client = storage.Client(project="restaurant-recommender")
     bucket = storage_client.bucket("restaurant-recommender-dataset")
     blob = bucket.blob("out-s0.csv.gz")
-    blob.download_to_filename(DATA_DIR / "data.csv.gz")
+    blob.download_to_filename(data_dir / "data.csv.gz")
 
-    # Read the downloaded file into a pandas DataFrame
-    col_names = [
-        "gastro_business_id", "gastro_name", "gastro_address", "gastro_city", "gastro_state", 
-        "gastro_postal_code", "gastro_latitude", "gastro_longitude", "gastro_stars", "gastro_review_count", 
-        "gastro_categories", "review_id", "review_user_id", "review_stars", "review_useful", "review_funny", 
-        "review_cool", "review_text", "review_date", "user_name", "user_review_count", "user_yelping_since", 
-        "user_useful", "user_funny", "user_cool", "user_elite", "user_friends", "user_fans", 
-        "user_average_stars"
-    ]
+    all_categories = set()
+    logging.info("First processing block...")
     df = pd.read_csv(
-        DATA_DIR / "data.csv.gz", names=col_names, compression='gzip', escapechar='\\', delimiter="\t", 
-        parse_dates= ["review_date", "user_yelping_since"], index_col=False, nrows=n_rows
+        data_dir / "data.csv.gz", compression='gzip', escapechar='\\', delimiter="\t",
+        names=col_names, chunksize=chunk_size, parse_dates=["review_date", "user_yelping_since"]
     )
-    print(
-        f"These are the first 5 rows of the dataset:\n{df.head()}"
-        f"The dataset has {df.shape[0]} rows and {df.shape[1]} columns."
+    count = 0
+    for chunk in df:
+        logging.info(f"Processing chunk {count}")
+        if num_chunks is not None and count == num_chunks:
+            break
+        processed_chunk = preprocess_chunk(chunk, drop_cols)
+        all_categories.update(set(processed_chunk.columns))
+        logging.info(f"# of columns of chunk {count}: {processed_chunk.shape[1]}...")
+        count += 1
+    sorted_categories = sorted(list(all_categories))
+
+    logging.info("Second processing block...")
+    df = pd.read_csv(
+        data_dir / "data.csv.gz", compression='gzip', escapechar='\\', delimiter="\t",
+        names=col_names, chunksize=chunk_size, parse_dates=["review_date", "user_yelping_since"]
     )
+    count = 0
+    for chunk in df:
+        logging.info(f"Processing chunk {count}")
+        if num_chunks is not None and count == num_chunks:
+            break
+        processed_chunk = preprocess_chunk(chunk, drop_cols)
+        processed_chunk = add_missing_categories(processed_chunk, all_categories)
+        processed_chunk = processed_chunk[sorted_categories]
+        if count == 0:
+            processed_chunk.to_parquet(destination_file, index=False, engine='fastparquet')
+        else:
+            processed_chunk.to_parquet(
+                DATA_DIR / 'train.parquet', index=False, engine='fastparquet', append=True
+            )
+        count += 1
 
-    # Drop samples in which review_stars is NaN
-    df = df.dropna(subset=["review_stars", "gastro_name"])
-
-    # Drop not needed columns
-    df = df.drop(columns=[
-        'gastro_name', 'gastro_address', 'gastro_latitude', 'gastro_longitude', 'review_id', 
-        'user_name', 'review_text', 'review_date', 'user_yelping_since', 'user_friends'
-    ])
-
-    if 'gastro_postal_code' in df.columns:
-        df['gastro_postal_code'] = df['gastro_postal_code'].astype(str)
-
-    # Print the number of missing values in each column
-    print(f"\nNumber of missing values in each column befroe imputation:\n{df.isnull().sum()}")
-
-    columns_to_split = ['gastro_categories', 'user_elite']
-    for column in columns_to_split:
-        exploded = df[column].str.split(',').explode()
-        dummies = pd.get_dummies(exploded, prefix=column).astype('float32')
-        dummies = dummies.groupby(dummies.index).sum()
-        df = df.join(dummies) 
-
-    # Drop the original columns
-    df = df.drop(columns=columns_to_split)
-
-    # Impute NaN values
-    for column in df.select_dtypes(include=['object', 'string']).columns:
-        df[column] = df[column].fillna('Unknown')
-    for column in df.select_dtypes(include=['int', 'float']).columns:
-        df[column] = df[column].fillna(0)
-
-    categorical_cols = df.select_dtypes(include=['object']).columns
-    df = pd.get_dummies(df, columns=categorical_cols).astype('float32')
-
-    # Print the number of missing values in each column
-    print(f"Number of missing values: {df.isnull().sum().sum()}")
-    print(f"These are the first 5 rows of the dataset after cleaning:\n{df.head()}")
-
-    non_numeric_columns = df.select_dtypes(exclude=['int', 'float']).shape[1]
-    print(f"The number of columns that are not of type numeric or float is: {non_numeric_columns}")
-
-    # Save the DataFrame as a parquet file
-    df.to_parquet(DATA["train"], index=False, engine="pyarrow")
-
-    (DATA_DIR / "data.csv.gz").unlink()
-
-    print("Data downloaded successfully!")
+    # Clean up the downloaded file
+    os.unlink(data_dir / "data.csv.gz")
+    logging.info("Data processed and saved successfully!")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Download data.')
+    parser = argparse.ArgumentParser(description='Download and process data.')
     parser.add_argument('--raw_data', action='store_true', help='Download the raw data from Kaggle.')
     parser.add_argument('--final_data', action='store_true', help='Download the final dataset from the bucket.')
-    parser.add_argument(
-        '--nrows', type=int, default=None, 
-        help='Number of rows to load from the final dataset. If not set, the entire dataset will be loaded.'
-    )
+    parser.add_argument('--num_chunks', type=int, default=None, help='Number of chunks to load and process.')
     args = parser.parse_args()
 
+    if os.path.exists(DATA["train"]):
+        os.remove(DATA["train"])
+
     if args.final_data:
-        load_final_dataset(DATA_DIR, args.nrows)
+        load_final_dataset(DATA_DIR, DATA["train"], COLS, DROP_COLS, 20000, args.num_chunks)
     elif args.raw_data:
-        load_raw_datasets()
+        load_raw_datasets(DATA_DIR)
