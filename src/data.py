@@ -22,15 +22,20 @@ def load_raw_datasets(data_dir):
     )
     logging.info("Data downloaded successfully!")
 
-def preprocess_chunk(df, drop_cols):
+def preprocess_chunk(df, drop_cols, user_id_offset, business_id_offset):
     """Preprocess a chunk of the dataframe."""
     df = df.dropna(subset=["review_stars", "gastro_name"])
     df['user_elite'] = df['user_elite'].fillna('Never')
     df = df.drop(columns=drop_cols)
 
-    # Label encoding review_user_id and gastro_business_id bc too many unique values
-    df['review_user_id'], _ = pd.factorize(df['review_user_id'])
-    df['gastro_business_id'], _ = pd.factorize(df['gastro_business_id'])
+    # Label encoding review_user_id and gastro_business_id with offset
+    df['review_user_id'], uniques_user = pd.factorize(df['review_user_id'], sort=True)
+    df['review_user_id'] += user_id_offset
+    user_id_offset += len(uniques_user)
+
+    df['gastro_business_id'], uniques_business = pd.factorize(df['gastro_business_id'], sort=True)
+    df['gastro_business_id'] += business_id_offset
+    business_id_offset += len(uniques_business)
 
     for column in ['gastro_categories', 'user_elite']:
         dummies = df[column].str.get_dummies(sep=',').astype(int)
@@ -42,7 +47,7 @@ def preprocess_chunk(df, drop_cols):
     cat_cols = df.select_dtypes(include=['object']).columns.tolist()
     df = pd.get_dummies(df, columns=cat_cols).astype(int)
     
-    return df
+    return df, user_id_offset, business_id_offset
 
 def add_missing_categories(chunk, all_categories):
     missing_categories = [cat for cat in all_categories if cat not in chunk.columns]
@@ -68,12 +73,16 @@ def load_final_dataset(
         data_dir / "data.csv.gz", compression='gzip', escapechar='\\', delimiter="\t",
         names=col_names, chunksize=chunk_size, parse_dates=["review_date", "user_yelping_since"]
     )
+    user_id_offset = 0
+    business_id_offset = 0
     count = 0
     for chunk in df:
         logging.info(f"Processing chunk {count}")
         if num_chunks is not None and count == num_chunks:
             break
-        processed_chunk = preprocess_chunk(chunk, drop_cols)
+        processed_chunk user_id_offset, business_id_offset = preprocess_chunk(
+            chunk, drop_cols, user_id_offset, business_id_offset
+        )
         all_categories.update(set(processed_chunk.columns))
         logging.info(f"# of columns of chunk {count}: {processed_chunk.shape[1]}...")
         count += 1
@@ -85,6 +94,8 @@ def load_final_dataset(
         names=col_names, chunksize=chunk_size, parse_dates=["review_date", "user_yelping_since"]
     )
     count = 0
+    user_id_offset = 0
+    business_id_offset = 0
     for chunk in df:
         logging.info(f"Processing chunk {count}")
         if num_chunks is not None and count == num_chunks:
@@ -109,12 +120,15 @@ if __name__ == "__main__":
     parser.add_argument('--raw_data', action='store_true', help='Download the raw data from Kaggle.')
     parser.add_argument('--final_data', action='store_true', help='Download the final dataset from the bucket.')
     parser.add_argument('--num_chunks', type=int, default=None, help='Number of chunks to load and process.')
+    parser.add_argument(
+        '--chunk_size', type=int, default=TRAIN["chunk_size"], help='Size of each chunk to load and process.' 
+    )
     args = parser.parse_args()
 
     if os.path.exists(DATA["train"]):
         os.remove(DATA["train"])
 
     if args.final_data:
-        load_final_dataset(DATA_DIR, DATA["train"], COLS, DROP_COLS, 20000, args.num_chunks)
+        load_final_dataset(DATA_DIR, DATA["train"], COLS, DROP_COLS, args.chunk_size, args.num_chunks)
     elif args.raw_data:
         load_raw_datasets(DATA_DIR)
