@@ -65,3 +65,7 @@ TRAIN = {
     'epochs': 10,
     'lr': 0.001,
 }
+
+TRAIN['chunk_size'] = 3000 * TRAIN['batch_size']
+
+SEED = 42
