@@ -8,7 +8,7 @@ from train import filter_frame, YelpDataset
 from model import NCF
 
 def load_data(file_path):
-    df = pd.read_parquet(file_path, engine='pyarrow')
+    df = pd.read_parquet(file_path, engine='pyarrow').sparse.to_dense()
     return df
 
 def create_random_data(input_file, output_file, num_lines=5):
