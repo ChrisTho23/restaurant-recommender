@@ -2,9 +2,8 @@ import argparse
 import os
 import pandas as pd
 import logging
-from sklearn.preprocessing import LabelEncoder
 
-from config import DATA, DATA_DIR, COLS, DROP_COLS, GOOGLE_CLOUD_CREDENTIALS
+from config import DATA, TRAIN, DATA_DIR, COLS, DROP_COLS, GOOGLE_CLOUD_CREDENTIALS
 from google.cloud import storage
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -20,7 +19,7 @@ def load_raw_datasets(data_dir):
         path=data_dir,
         unzip=True,
     )
-    logging.info("Data downloaded successfully!")
+    logging.info("Raw data downloaded and saved successfully!")
 
 def preprocess_chunk(df, drop_cols, user_id_offset, business_id_offset):
     """Preprocess a chunk of the dataframe."""
@@ -57,11 +56,11 @@ def add_missing_categories(chunk, all_categories):
 
     return chunk
 
-def load_final_dataset(
+def load_preprocessed_dataset(
         data_dir, destination_file, col_names, drop_cols, chunk_size, num_chunks
     ):
     """Downloads a blob from the bucket and processes data."""
-    logging.info("Downloading data from the bucket...")
+    logging.info("Downloading preprocessed data from the bucket...")
     storage_client = storage.Client(project="restaurant-recommender")
     bucket = storage_client.bucket("restaurant-recommender-dataset")
     blob = bucket.blob("out-s0.csv.gz")
@@ -80,7 +79,7 @@ def load_final_dataset(
         logging.info(f"Processing chunk {count}")
         if num_chunks is not None and count == num_chunks:
             break
-        processed_chunk user_id_offset, business_id_offset = preprocess_chunk(
+        processed_chunk, user_id_offset, business_id_offset = preprocess_chunk(
             chunk, drop_cols, user_id_offset, business_id_offset
         )
         all_categories.update(set(processed_chunk.columns))
@@ -113,11 +112,21 @@ def load_final_dataset(
 
     # Clean up the downloaded file
     os.unlink(data_dir / "data.csv.gz")
-    logging.info("Data processed and saved successfully!")
+    logging.info("Preprocessed data downloaded, processed and saved successfully!")
+
+def load_final_dataset(destination_file):
+    """Downloads a blob from the bucket."""
+    logging.info("Downloading final data from the bucket...")
+    storage_client = storage.Client(project="restaurant-recommender")
+    bucket = storage_client.bucket("restaurant-recommender-dataset")
+    blob = bucket.blob("train.parquet")
+    blob.download_to_filename(DATA["train"])
+    logging.info("Fianl data downloaded and saved successfully!")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Download and process data.')
     parser.add_argument('--raw_data', action='store_true', help='Download the raw data from Kaggle.')
+    parser.add_argument('--preprocessed_data', action='store_true', help='Download the preprocessed dataset from the bucket.')
     parser.add_argument('--final_data', action='store_true', help='Download the final dataset from the bucket.')
     parser.add_argument('--num_chunks', type=int, default=None, help='Number of chunks to load and process.')
     parser.add_argument(
@@ -129,6 +138,8 @@ if __name__ == "__main__":
         os.remove(DATA["train"])
 
     if args.final_data:
-        load_final_dataset(DATA_DIR, DATA["train"], COLS, DROP_COLS, args.chunk_size, args.num_chunks)
+        load_final_dataset(DATA["train"])
+    elif args.preprocessed_data:
+        load_preprocessed_dataset(DATA_DIR, DATA["train"], COLS, DROP_COLS, args.chunk_size, args.num_chunks)
     elif args.raw_data:
         load_raw_datasets(DATA_DIR)
