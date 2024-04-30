@@ -1,24 +1,35 @@
 import torch
 from torch.utils.data import DataLoader, Dataset
 import pandas as pd
+import pyarrow.parquet as pq
 import argparse
+import logging
 
 from config import DATA, MODEL, USER_COLS, ITEM_COLS
-from train import filter_frame, YelpDataset
 from model import NCF
+from utils import chunk_to_loader, YelpDataset, filter_frame
 
-def load_data(file_path):
-    df = pd.read_parquet(file_path, engine='pyarrow').sparse.to_dense()
-    return df
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def create_random_data(input_file, output_file, num_lines=5):
-    print(f"Creating random data from {input_file} ...")
-    df = load_data(input_file)
-    random_rows = df.sample(n=num_lines)
-    random_rows.to_parquet(output_file)
+def load_first_chunk(file_path):
+    parquet_file = pq.ParquetFile(file_path)
+    chunk = parquet_file.read_row_group(0, columns=None)
+    df_chunk = chunk.to_pandas()
+    return df_chunk
+
+def create_random_data(input_file, output_file, user_cols, item_cols, num_lines=10):
+    logging.info(f"Creating random data from {input_file} ...")
+    df = load_first_chunk(input_file)
+    user_data = filter_frame(df, USER_COLS)
+    item_data = filter_frame(df, ITEM_COLS)
+    user_sample = user_data.sample(n=num_lines, replace=True).reset_index(drop=True)
+    item_sample = item_data.sample(n=num_lines, replace=True).reset_index(drop=True)
+    combined_sample = pd.concat([user_sample, item_sample], axis=1)
+    combined_sample.to_parquet(output_file)
+    return combined_sample
 
 if __name__ == "__main__":
-    print("Starting inference...")
+    logging.info("Starting inference...")
 
     # Set seed
     torch.manual_seed(42)
@@ -32,20 +43,20 @@ if __name__ == "__main__":
 
     # Set device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
+    logging.info(f"Using device: {device}")
 
     # Load data
     if args.create_data:
-        create_random_data(DATA["train"], DATA["inference"], 5)
-    df = load_data(DATA["inference"])
-    user_data = filter_frame(df, USER_COLS)
-    item_data = filter_frame(df, ITEM_COLS)
+        df_inference = create_random_data(DATA["train"], DATA["inference"], USER_COLS, ITEM_COLS)
+    else: 
+        df_inference = pd.read_parquet(DATA["inference"])
 
-    user_data = torch.tensor(user_data.values).to(device)
-    item_data = torch.tensor(item_data.values).to(device)
+    # Load data into dataset
+    user_data = filter_frame(df_inference, USER_COLS)
+    item_data = filter_frame(df_inference, ITEM_COLS)
 
-    dataset = YelpDataset(user_data, item_data)
-    data_loader = DataLoader(dataset, batch_size=64, shuffle=False)
+    user_data = torch.tensor(user_data.values, dtype=torch.float).to(device)
+    item_data = torch.tensor(item_data.values, dtype=torch.float).to(device)
 
     # Load model
     model = NCF(
@@ -61,12 +72,11 @@ if __name__ == "__main__":
     # Perform inference
     all_predictions = []
     with torch.no_grad():
-        for user_data, item_data in data_loader:
-            predictions = model(user_data, item_data)
-            all_predictions.extend(predictions.cpu().numpy())
+        predictions, _ = model(user_data, item_data)
+        all_predictions.extend(predictions.cpu().numpy())
     
-    # Optionally, handle or save the predictions
-    print("Predictions:", all_predictions)
+    # log the predictions
+    logging.info(f"First five Predictions: {[pred[0] for pred in all_predictions[:5]]}")
 
     # Save predictions to a parquet file
     predictions_df = pd.DataFrame(all_predictions, columns=['predictions'])
