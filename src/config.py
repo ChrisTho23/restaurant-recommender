@@ -17,7 +17,7 @@ DATA = {
 }
 
 # Path to the Google Cloud credentials
-GOOGLE_CLOUD_CREDENTIALS = "../application_default_credentials.json"
+GOOGLE_CLOUD_CREDENTIALS = "/Users/Christophe/.config/gcloud/application_default_credentials.json"
 
 # Columns in dataset
 COLS = [
